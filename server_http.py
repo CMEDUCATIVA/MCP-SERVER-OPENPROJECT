@@ -209,11 +209,82 @@ async def test_connection(request: Request):
 
 @app.post("/tools/list_projects", tags=["Projects"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
-async def list_projects(request: Request, active_only: bool = True):
-    """2. Listar proyectos"""
+async def list_projects(
+    request: Request,
+    active_only: bool = True,
+    offset: Optional[int] = None,
+    page_size: Optional[int] = None,
+    full_retrieval: bool = True
+):
+    """2. Listar TODOS los proyectos (con paginación opcional)"""
     try:
-        result = await client.get_projects(active_only=active_only)
-        return result
+        # Si se especifican parámetros de paginación explícitos, usar modo manual
+        # NOTA: active_only no debe activar modo manual, solo offset/page_size
+        if offset is not None or page_size is not None:
+            result = await client.get_projects(
+                active_only=active_only,
+                offset=offset or 1,
+                page_size=page_size or 20
+            )
+            logger.info(f"Manual pagination: offset={offset or 1}, page_size={page_size or 20}, retrieved={len(result.get('_embedded', {}).get('elements', []))}")
+            return result
+        
+        # Modo por defecto: obtener TODOS los proyectos con auto-paginación
+        all_projects = []
+        current_offset = 1
+        page_size_auto = 100
+        total_projects = 0
+        
+        logger.info(f"Starting FULL retrieval of ALL projects (active_only={active_only})")
+        
+        while True:
+            result = await client.get_projects(
+                active_only=active_only,
+                offset=current_offset,
+                page_size=page_size_auto
+            )
+            
+            projects = result.get("_embedded", {}).get("elements", [])
+            total = result.get("total", 0)
+            
+            if not projects:
+                break
+                
+            all_projects.extend(projects)
+            total_projects = total
+            
+            logger.info(f"Retrieved {len(projects)} projects (offset: {current_offset}, total so far: {len(all_projects)})")
+            
+            # Check if we've got all projects
+            if len(all_projects) >= total:
+                break
+                
+            current_offset += len(projects)
+            
+            # Safety check to prevent infinite loops
+            if len(projects) == 0:
+                break
+        
+        logger.info(f"FULL retrieval complete: {len(all_projects)} projects retrieved")
+        
+        # Construir respuesta con TODOS los proyectos
+        response = {
+            "_type": "Collection",
+            "total": len(all_projects),
+            "count": len(all_projects),
+            "pageSize": len(all_projects),
+            "offset": 1,
+            "_embedded": {
+                "elements": all_projects
+            },
+            "_retrieval_info": {
+                "mode": "full_retrieval",
+                "total_retrieved": len(all_projects),
+                "note": "All projects retrieved successfully"
+            }
+        }
+        
+        return response
     except Exception as e:
         logger.error(f"Error in list_projects: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -303,9 +374,12 @@ async def delete_project(request: Request, project_id: int):
 async def list_work_packages(
     request: Request,
     project_id: Optional[int] = None,
-    status: str = "open"
+    status: str = "open",
+    offset: Optional[int] = None,
+    page_size: Optional[int] = None,
+    full_retrieval: bool = True
 ):
-    """3. Listar work packages"""
+    """3. Listar TODOS los work packages (con paginación opcional)"""
     try:
         # Construir filtros
         filters = []
@@ -332,8 +406,75 @@ async def list_work_packages(
                 }
             })
         
-        result = await client.get_work_packages(filters=filters if filters else None)
-        return result
+        # Si se especifican parámetros de paginación explícitos, usar modo manual
+        # NOTA: project_id, status no deben activar modo manual, solo offset/page_size
+        if offset is not None or page_size is not None:
+            result = await client.get_work_packages(
+                project_id=project_id,
+                filters=filters if filters else None,
+                offset=offset or 1,
+                page_size=page_size or 20
+            )
+            logger.info(f"Manual pagination: offset={offset or 1}, page_size={page_size or 20}, retrieved={len(result.get('_embedded', {}).get('elements', []))}")
+            return result
+        
+        # Modo por defecto: obtener TODOS los work packages con auto-paginación
+        all_work_packages = []
+        current_offset = 1
+        page_size_auto = 100
+        total_work_packages = 0
+        
+        logger.info(f"Starting FULL retrieval of ALL work packages (project_id={project_id}, status={status})")
+        
+        while True:
+            result = await client.get_work_packages(
+                project_id=project_id,
+                filters=filters if filters else None,
+                offset=current_offset,
+                page_size=page_size_auto
+            )
+            
+            work_packages = result.get("_embedded", {}).get("elements", [])
+            total = result.get("total", 0)
+            
+            if not work_packages:
+                break
+                
+            all_work_packages.extend(work_packages)
+            total_work_packages = total
+            
+            logger.info(f"Retrieved {len(work_packages)} work packages (offset: {current_offset}, total so far: {len(all_work_packages)})")
+            
+            # Check if we've got all work packages
+            if len(all_work_packages) >= total:
+                break
+                
+            current_offset += len(work_packages)
+            
+            # Safety check to prevent infinite loops
+            if len(work_packages) == 0:
+                break
+        
+        logger.info(f"FULL retrieval complete: {len(all_work_packages)} work packages retrieved")
+        
+        # Construir respuesta con TODOS los work packages
+        response = {
+            "_type": "Collection",
+            "total": len(all_work_packages),
+            "count": len(all_work_packages),
+            "pageSize": len(all_work_packages),
+            "offset": 1,
+            "_embedded": {
+                "elements": all_work_packages
+            },
+            "_retrieval_info": {
+                "mode": "full_retrieval",
+                "total_retrieved": len(all_work_packages),
+                "note": "All work packages retrieved successfully"
+            }
+        }
+        
+        return response
     except Exception as e:
         logger.error(f"Error in list_work_packages: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -899,7 +1040,8 @@ async def create_version(
 @limiter.limit(RATE_LIMIT)
 async def rest_list_projects(request: Request, active: bool = True):
     """Alias REST: Listar proyectos"""
-    return await list_projects(request, active)
+    # Forzar full retrieval para GET requests (comportamiento REST esperado)
+    return await list_projects(request, active_only=active, offset=None, page_size=None, full_retrieval=True)
 
 @app.post("/api/v1/projects", tags=["REST Aliases"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
@@ -957,7 +1099,8 @@ async def rest_list_workpackages(
     status: str = "open"
 ):
     """Alias REST: Listar work packages"""
-    return await list_work_packages(request, project_id, status)
+    # Forzar full retrieval para GET requests (comportamiento REST esperado)
+    return await list_work_packages(request, project_id, status, offset=None, page_size=None, full_retrieval=True)
 
 @app.post("/api/v1/workpackages", tags=["REST Aliases"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
@@ -1043,11 +1186,26 @@ async def query(request: Request):
     if tool == "test_connection":
         return await test_connection(request)
     elif tool == "list_projects":
-        return await list_projects(request, params.get("active_only", True))
+        # Forzar full retrieval por defecto
+        return await list_projects(
+            request,
+            active_only=params.get("active_only", True),
+            offset=params.get("offset"),
+            page_size=params.get("page_size"),
+            full_retrieval=True
+        )
     elif tool == "list_users":
         return await list_users(request, params.get("active_only", True))
     elif tool == "list_work_packages":
-        return await list_work_packages(request, params.get("project_id"), params.get("status", "open"))
+        # Forzar full retrieval por defecto
+        return await list_work_packages(
+            request,
+            project_id=params.get("project_id"),
+            status=params.get("status", "open"),
+            offset=params.get("offset"),
+            page_size=params.get("page_size"),
+            full_retrieval=True
+        )
     else:
         raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
 
