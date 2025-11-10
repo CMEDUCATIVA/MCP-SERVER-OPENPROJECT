@@ -174,11 +174,80 @@ class OpenProjectClient:
         filters: Optional[List] = None,
         active_only: bool = True,
         name_contains: Optional[str] = None,
+    ) -> Dict:
+        """
+        Retrieve all projects.
+
+        Args:
+            filters: Optional list of filter dictionaries
+            active_only: If True, only return active projects (default: True)
+            name_contains: Optional string to filter projects by name (case-insensitive partial match)
+
+        Returns:
+            Dict: API response containing projects
+        """
+        logger.info(f"Starting FULL retrieval of ALL projects (active_only={active_only})")
+        
+        all_projects = []
+        current_offset = 1
+        page_size = 100  # Use larger page size for efficiency
+        total_projects = 0
+        
+        while True:
+            # Get a single page
+            result = await self._get_projects_page(
+                filters=filters,
+                active_only=active_only,
+                name_contains=name_contains,
+                offset=current_offset,
+                page_size=page_size
+            )
+            
+            projects = result.get("_embedded", {}).get("elements", [])
+            total = result.get("total", 0)
+            
+            if not projects:
+                break
+                
+            all_projects.extend(projects)
+            total_projects = total
+            
+            logger.info(f"Retrieved {len(projects)} projects (offset: {current_offset}, total so far: {len(all_projects)})")
+            
+            # Check if we've got all projects
+            if len(all_projects) >= total:
+                break
+                
+            current_offset += len(projects)
+            
+            # Safety check to prevent infinite loops
+            if len(projects) == 0:
+                break
+        
+        logger.info(f"FULL retrieval complete: {len(all_projects)} projects retrieved")
+        
+        # Return a response that mimics the API structure but contains all projects
+        return {
+            "_type": "Collection",
+            "total": len(all_projects),
+            "count": len(all_projects),
+            "pageSize": len(all_projects),
+            "offset": 1,
+            "_embedded": {
+                "elements": all_projects
+            }
+        }
+    
+    async def _get_projects_page(
+        self,
+        filters: Optional[List] = None,
+        active_only: bool = True,
+        name_contains: Optional[str] = None,
         offset: Optional[int] = None,
         page_size: Optional[int] = None,
     ) -> Dict:
         """
-        Retrieve all projects.
+        Get a single page of projects (internal helper method).
 
         Args:
             filters: Optional list of filter dictionaries
@@ -250,6 +319,86 @@ class OpenProjectClient:
     ) -> Dict:
         """
         Retrieve work packages.
+
+        Args:
+            project_id: Optional project ID to filter by
+            filters: Optional list of filter dictionaries
+            offset: Optional starting index for pagination
+            page_size: Optional number of results per page
+
+        Returns:
+            Dict: API response containing work packages
+        """
+        # If no pagination parameters are provided, use auto-pagination to get ALL work packages
+        if offset is None and page_size is None:
+            logger.info(f"Starting FULL retrieval of ALL work packages (project_id={project_id})")
+            
+            all_work_packages = []
+            current_offset = 1
+            page_size = 100  # Use larger page size for efficiency
+            total_work_packages = 0
+            
+            while True:
+                # Get a single page
+                result = await self._get_work_packages_page(
+                    project_id=project_id,
+                    filters=filters,
+                    offset=current_offset,
+                    page_size=page_size
+                )
+                
+                work_packages = result.get("_embedded", {}).get("elements", [])
+                total = result.get("total", 0)
+                
+                if not work_packages:
+                    break
+                    
+                all_work_packages.extend(work_packages)
+                total_work_packages = total
+                
+                logger.info(f"Retrieved {len(work_packages)} work packages (offset: {current_offset}, total so far: {len(all_work_packages)})")
+                
+                # Check if we've got all work packages
+                if len(all_work_packages) >= total:
+                    break
+                    
+                current_offset += len(work_packages)
+                
+                # Safety check to prevent infinite loops
+                if len(work_packages) == 0:
+                    break
+            
+            logger.info(f"FULL retrieval complete: {len(all_work_packages)} work packages retrieved")
+            
+            # Return a response that mimics API structure but contains all work packages
+            return {
+                "_type": "Collection",
+                "total": len(all_work_packages),
+                "count": len(all_work_packages),
+                "pageSize": len(all_work_packages),
+                "offset": 1,
+                "_embedded": {
+                    "elements": all_work_packages
+                }
+            }
+        
+        # Manual pagination mode - just get requested page
+        return await self._get_work_packages_page(
+            project_id=project_id,
+            filters=filters,
+            offset=offset,
+            page_size=page_size
+        )
+    
+    async def _get_work_packages_page(
+        self,
+        project_id: Optional[int] = None,
+        filters: Optional[List] = None,
+        offset: Optional[int] = None,
+        page_size: Optional[int] = None,
+    ) -> Dict:
+        """
+        Get a single page of work packages (internal helper method).
 
         Args:
             project_id: Optional project ID to filter by
@@ -1246,7 +1395,7 @@ class OpenProjectMCPServer:
                 ),
                 Tool(
                     name="list_projects",
-                    description="List all OpenProject projects with pagination and search",
+                    description="List all OpenProject projects with search (always returns all projects)",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -1258,14 +1407,6 @@ class OpenProjectMCPServer:
                             "name_contains": {
                                 "type": "string",
                                 "description": "Filter projects by name (case-insensitive partial match)",
-                            },
-                            "offset": {
-                                "type": "integer",
-                                "description": "Starting index for pagination (optional, default: 1)",
-                            },
-                            "page_size": {
-                                "type": "integer",
-                                "description": "Number of results per page (optional, default: 20, max: 100)",
                             },
                         },
                     },
@@ -2075,111 +2216,27 @@ class OpenProjectMCPServer:
                 elif name == "list_projects":
                     active_only = arguments.get("active_only", True)
                     name_contains = arguments.get("name_contains")
-                    offset = arguments.get("offset")
-                    page_size = arguments.get("page_size", 100)  # Default to larger page size
 
-                    # Force auto-pagination mode for better user experience
-                    # Only use manual mode if explicitly requested with large page_size
-                    if offset is not None and page_size and page_size < 50:
-                        # Manual pagination mode for small requests
-                        result = await self.client.get_projects(
-                            active_only=active_only,
-                            name_contains=name_contains,
-                            offset=offset,
-                            page_size=page_size
-                        )
-
-                        projects = result.get("_embedded", {}).get("elements", [])
-                        total = result.get("total", len(projects))
-                        count = result.get("count", len(projects))
-                        page_size_actual = result.get("pageSize", page_size)
-                        offset_actual = result.get("offset", offset)
-
-                        if not projects:
-                            text = "No projects found."
-                            if name_contains:
-                                text += f"\n\nSearch term: '{name_contains}'"
-                        else:
-                            # Pagination info
-                            start = offset_actual
-                            end = min(offset_actual + count - 1, total)
-
-                            text = f"**Projects ({start}-{end} of {total})**\n"
-                            if name_contains:
-                                text += f"Search: '{name_contains}'\n"
-                            text += f"Filter: {'Active only' if active_only else 'All'}\n\n"
-
-                            for project in projects:
-                                text += f"- **{project['name']}** (ID: {project['id']})\n"
-                                if project.get("description", {}).get("raw"):
-                                    desc = project['description']['raw']
-                                    # Truncate long descriptions
-                                    if len(desc) > 100:
-                                        desc = desc[:100] + "..."
-                                    text += f"  {desc}\n"
-                                text += f"  Status: {'Active' if project.get('active') else 'Inactive'}\n"
-                                text += f"  Public: {'Yes' if project.get('public') else 'No'}\n\n"
-
-                            # Pagination hints
-                            if end < total:
-                                next_offset = offset_actual + count
-                                text += f"\n---\n"
-                                text += f"💡 To see more results, use:\n"
-                                text += f"   offset={next_offset}, page_size={page_size_actual}\n"
-                                text += f"   Remaining: {total - end} projects\n"
-
-                        return [TextContent(type="text", text=text)]
+                    # Get ALL projects with auto-pagination
+                    result = await self.client.get_projects(
+                        active_only=active_only,
+                        name_contains=name_contains
+                    )
                     
-                    # Auto-pagination mode: get all projects
-                    all_projects = []
-                    current_offset = 1
-                    page_size = 100  # Use larger page size for efficiency
-                    total_projects = 0
+                    projects = result.get("_embedded", {}).get("elements", [])
+                    total = result.get("total", len(projects))
                     
-                    logger.info(f"Starting auto-pagination for projects (active_only={active_only}, name_contains={name_contains})")
-                    
-                    while True:
-                        result = await self.client.get_projects(
-                            active_only=active_only,
-                            name_contains=name_contains,
-                            offset=current_offset,
-                            page_size=page_size
-                        )
-                        
-                        projects = result.get("_embedded", {}).get("elements", [])
-                        total = result.get("total", 0)
-                        
-                        if not projects:
-                            break
-                            
-                        all_projects.extend(projects)
-                        total_projects = total
-                        
-                        logger.info(f"Retrieved {len(projects)} projects (offset: {current_offset}, total so far: {len(all_projects)})")
-                        
-                        # Check if we've got all projects
-                        if len(all_projects) >= total:
-                            break
-                            
-                        current_offset += len(projects)
-                        
-                        # Safety check to prevent infinite loops
-                        if len(projects) == 0:
-                            break
-                    
-                    logger.info(f"Auto-pagination complete: {len(all_projects)} projects retrieved")
-                    
-                    if not all_projects:
+                    if not projects:
                         text = "No projects found."
                         if name_contains:
                             text += f"\n\nSearch term: '{name_contains}'"
                     else:
-                        text = f"**All Projects ({len(all_projects)} total)**\n"
+                        text = f"**All Projects ({total} total)**\n"
                         if name_contains:
                             text += f"Search: '{name_contains}'\n"
                         text += f"Filter: {'Active only' if active_only else 'All'}\n\n"
 
-                        for project in all_projects:
+                        for project in projects:
                             text += f"- **{project['name']}** (ID: {project['id']})\n"
                             if project.get("description", {}).get("raw"):
                                 desc = project['description']['raw']
