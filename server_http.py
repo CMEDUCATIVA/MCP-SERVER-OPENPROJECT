@@ -213,26 +213,14 @@ async def list_projects(
     request: Request,
     active_only: bool = True,
     offset: Optional[int] = None,
-    page_size: Optional[int] = None,
-    full_retrieval: bool = True
+    page_size: Optional[int] = None
 ):
-    """2. Listar TODOS los proyectos (con paginación opcional)"""
+    """2. Listar TODOS los proyectos (SIEMPRE devuelve todos sin paginación)"""
     try:
-        # Si se especifican parámetros de paginación explícitos, usar modo manual
-        # NOTA: active_only no debe activar modo manual, solo offset/page_size
-        if offset is not None or page_size is not None:
-            result = await client.get_projects(
-                active_only=active_only,
-                offset=offset or 1,
-                page_size=page_size or 20
-            )
-            logger.info(f"Manual pagination: offset={offset or 1}, page_size={page_size or 20}, retrieved={len(result.get('_embedded', {}).get('elements', []))}")
-            return result
-        
-        # Modo por defecto: obtener TODOS los proyectos con auto-paginación
+        # SIEMPRE usar modo de recuperación completa, ignorar paginación
         all_projects = []
         current_offset = 1
-        page_size_auto = 100
+        page_size_auto = 100  # Tamaño grande para eficiencia
         total_projects = 0
         
         logger.info(f"Starting FULL retrieval of ALL projects (active_only={active_only})")
@@ -272,7 +260,7 @@ async def list_projects(
             "_type": "Collection",
             "total": len(all_projects),
             "count": len(all_projects),
-            "pageSize": len(all_projects),
+            "pageSize": len(all_projects),  # <-- IMPORTANTE: pageSize = total de elementos
             "offset": 1,
             "_embedded": {
                 "elements": all_projects
@@ -285,6 +273,7 @@ async def list_projects(
         }
         
         return response
+        
     except Exception as e:
         logger.error(f"Error in list_projects: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1040,8 +1029,8 @@ async def create_version(
 @limiter.limit(RATE_LIMIT)
 async def rest_list_projects(request: Request, active: bool = True):
     """Alias REST: Listar proyectos"""
-    # Forzar full retrieval para GET requests (comportamiento REST esperado)
-    return await list_projects(request, active_only=active, offset=None, page_size=None, full_retrieval=True)
+    # Llamar directamente sin parámetros de paginación para forzar recuperación completa
+    return await list_projects(request, active_only=active)
 
 @app.post("/api/v1/projects", tags=["REST Aliases"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
@@ -1099,8 +1088,8 @@ async def rest_list_workpackages(
     status: str = "open"
 ):
     """Alias REST: Listar work packages"""
-    # Forzar full retrieval para GET requests (comportamiento REST esperado)
-    return await list_work_packages(request, project_id, status, offset=None, page_size=None, full_retrieval=True)
+    # Llamar directamente sin parámetros de paginación para forzar recuperación completa
+    return await list_work_packages(request, project_id, status)
 
 @app.post("/api/v1/workpackages", tags=["REST Aliases"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
@@ -1186,25 +1175,19 @@ async def query(request: Request):
     if tool == "test_connection":
         return await test_connection(request)
     elif tool == "list_projects":
-        # Forzar full retrieval por defecto
+        # Llamar directamente sin parámetros de paginación para forzar recuperación completa
         return await list_projects(
             request,
-            active_only=params.get("active_only", True),
-            offset=params.get("offset"),
-            page_size=params.get("page_size"),
-            full_retrieval=True
+            active_only=params.get("active_only", True)
         )
     elif tool == "list_users":
         return await list_users(request, params.get("active_only", True))
     elif tool == "list_work_packages":
-        # Forzar full retrieval por defecto
+        # Llamar directamente sin parámetros de paginación para forzar recuperación completa
         return await list_work_packages(
             request,
             project_id=params.get("project_id"),
-            status=params.get("status", "open"),
-            offset=params.get("offset"),
-            page_size=params.get("page_size"),
-            full_retrieval=True
+            status=params.get("status", "open")
         )
     else:
         raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
