@@ -2078,8 +2078,10 @@ class OpenProjectMCPServer:
                     offset = arguments.get("offset")
                     page_size = arguments.get("page_size", 100)  # Default to larger page size
 
-                    # If offset is provided, use manual pagination mode
-                    if offset is not None:
+                    # Force auto-pagination mode for better user experience
+                    # Only use manual mode if explicitly requested with large page_size
+                    if offset is not None and page_size and page_size < 50:
+                        # Manual pagination mode for small requests
                         result = await self.client.get_projects(
                             active_only=active_only,
                             name_contains=name_contains,
@@ -2206,8 +2208,10 @@ class OpenProjectMCPServer:
                             [{"status_id": {"operator": "c", "values": None}}]
                         )
 
-                    # If offset is provided, use manual pagination mode
-                    if offset is not None:
+                    # Force auto-pagination mode for better user experience
+                    # Only use manual mode if explicitly requested with large page_size
+                    if offset is not None and page_size and page_size < 50:
+                        # Manual pagination mode for small requests
                         result = await self.client.get_work_packages(
                             project_id, filters, offset, page_size
                         )
