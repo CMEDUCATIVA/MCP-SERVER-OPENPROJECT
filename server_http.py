@@ -211,63 +211,36 @@ async def test_connection(request: Request):
 @limiter.limit(RATE_LIMIT)
 async def list_projects(
     request: Request,
-    active_only: bool = True,
-    offset: Optional[int] = None,
-    page_size: Optional[int] = None
+    active_only: bool = True
 ):
     """2. Listar TODOS los proyectos (SIEMPRE devuelve todos sin paginación)"""
     try:
-        # SIEMPRE usar modo de recuperación completa, ignorar paginación
-        all_projects = []
-        current_offset = 1
-        page_size_auto = 100  # Tamaño grande para eficiencia
-        total_projects = 0
-        
+        # SIEMPRE usar modo de recuperación completa
+        # El cliente MCP ahora siempre usa auto-paginación internamente
         logger.info(f"Starting FULL retrieval of ALL projects (active_only={active_only})")
         
-        while True:
-            result = await client.get_projects(
-                active_only=active_only,
-                offset=current_offset,
-                page_size=page_size_auto
-            )
-            
-            projects = result.get("_embedded", {}).get("elements", [])
-            total = result.get("total", 0)
-            
-            if not projects:
-                break
-                
-            all_projects.extend(projects)
-            total_projects = total
-            
-            logger.info(f"Retrieved {len(projects)} projects (offset: {current_offset}, total so far: {len(all_projects)})")
-            
-            # Check if we've got all projects
-            if len(all_projects) >= total:
-                break
-                
-            current_offset += len(projects)
-            
-            # Safety check to prevent infinite loops
-            if len(projects) == 0:
-                break
+        result = await client.get_projects(
+            active_only=active_only
+        )
         
-        logger.info(f"FULL retrieval complete: {len(all_projects)} projects retrieved")
+        projects = result.get("_embedded", {}).get("elements", [])
+        total = result.get("total", 0)
+        
+        logger.info(f"FULL retrieval complete: {len(projects)} projects retrieved (total: {total})")
         
         # Construir respuesta con TODOS los proyectos
         response = {
             "_type": "Collection",
-            "total": len(all_projects),
-            "count": len(all_projects),
-            "pageSize": len(all_projects),  # <-- IMPORTANTE: pageSize = total de elementos
+            "total": total,
+            "count": len(projects),
+            "pageSize": len(projects),  # <-- IMPORTANTE: pageSize = total de elementos
             "offset": 1,
             "_embedded": {
-                "elements": all_projects
+                "elements": projects
             },
             "_retrieval_info": {
                 "mode": "full_retrieval",
-                "total_retrieved": len(all_projects),
+                "total_retrieved": len(projects),
                 "note": "All projects retrieved successfully"
             }
         }
@@ -395,70 +368,36 @@ async def list_work_packages(
                 }
             })
         
-        # Si se especifican parámetros de paginación explícitos, usar modo manual
-        # NOTA: project_id, status no deben activar modo manual, solo offset/page_size
-        if offset is not None or page_size is not None:
-            result = await client.get_work_packages(
-                project_id=project_id,
-                filters=filters if filters else None,
-                offset=offset or 1,
-                page_size=page_size or 20
-            )
-            logger.info(f"Manual pagination: offset={offset or 1}, page_size={page_size or 20}, retrieved={len(result.get('_embedded', {}).get('elements', []))}")
-            return result
-        
-        # Modo por defecto: obtener TODOS los work packages con auto-paginación
-        all_work_packages = []
-        current_offset = 1
-        page_size_auto = 100
-        total_work_packages = 0
-        
+        # SIEMPRE usar modo de recuperación completa, NO pasar parámetros de paginación al cliente MCP
+        # Esto permite que el cliente MCP use auto-paginación
         logger.info(f"Starting FULL retrieval of ALL work packages (project_id={project_id}, status={status})")
         
-        while True:
-            result = await client.get_work_packages(
-                project_id=project_id,
-                filters=filters if filters else None,
-                offset=current_offset,
-                page_size=page_size_auto
-            )
-            
-            work_packages = result.get("_embedded", {}).get("elements", [])
-            total = result.get("total", 0)
-            
-            if not work_packages:
-                break
-                
-            all_work_packages.extend(work_packages)
-            total_work_packages = total
-            
-            logger.info(f"Retrieved {len(work_packages)} work packages (offset: {current_offset}, total so far: {len(all_work_packages)})")
-            
-            # Check if we've got all work packages
-            if len(all_work_packages) >= total:
-                break
-                
-            current_offset += len(work_packages)
-            
-            # Safety check to prevent infinite loops
-            if len(work_packages) == 0:
-                break
+        result = await client.get_work_packages(
+            project_id=project_id,
+            filters=filters if filters else None,
+            # NO pasar offset ni page_size para activar auto-paginación en el cliente MCP
+            offset=None,
+            page_size=None
+        )
         
-        logger.info(f"FULL retrieval complete: {len(all_work_packages)} work packages retrieved")
+        work_packages = result.get("_embedded", {}).get("elements", [])
+        total = result.get("total", 0)
+        
+        logger.info(f"FULL retrieval complete: {len(work_packages)} work packages retrieved (total: {total})")
         
         # Construir respuesta con TODOS los work packages
         response = {
             "_type": "Collection",
-            "total": len(all_work_packages),
-            "count": len(all_work_packages),
-            "pageSize": len(all_work_packages),
+            "total": total,
+            "count": len(work_packages),
+            "pageSize": len(work_packages),
             "offset": 1,
             "_embedded": {
-                "elements": all_work_packages
+                "elements": work_packages
             },
             "_retrieval_info": {
                 "mode": "full_retrieval",
-                "total_retrieved": len(all_work_packages),
+                "total_retrieved": len(work_packages),
                 "note": "All work packages retrieved successfully"
             }
         }
