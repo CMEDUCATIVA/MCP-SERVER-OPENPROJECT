@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  openproject-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: openproject-mcp-server:latest
+    container_name: openproject-mcp-server
+    restart: unless-stopped
+
+    # Puerto del servidor HTTP
+    ports:
+      - "${HTTP_PORT:-8000}:8000"
+
+    # Variables de entorno
+    environment:
+      # OpenProject Connection (REQUERIDO)
+      OPENPROJECT_URL: ${OPENPROJECT_URL}
+      OPENPROJECT_API_KEY: ${OPENPROJECT_API_KEY}
+      OPENPROJECT_PROXY: ${OPENPROJECT_PROXY:-}
+
+      # HTTP Server Configuration
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8000
+
+      # Security
+      HTTP_AUTH_ENABLED: ${HTTP_AUTH_ENABLED:-false}
+      HTTP_AUTH_USERNAME: ${HTTP_AUTH_USERNAME:-admin}
+      HTTP_AUTH_PASSWORD: ${HTTP_AUTH_PASSWORD:-changeme}
+
+      # CORS Configuration
+      CORS_ENABLED: ${CORS_ENABLED:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+
+      # Rate Limiting
+      RATE_LIMIT: ${RATE_LIMIT:-100/minute}
+
+      # Compression
+      GZIP_ENABLED: ${GZIP_ENABLED:-true}
+      GZIP_MIN_SIZE: ${GZIP_MIN_SIZE:-1000}
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      TEST_CONNECTION_ON_STARTUP: ${TEST_CONNECTION_ON_STARTUP:-true}
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Recursos (ajustar según necesidad)
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+    # Redes
+    networks:
+      - openproject-network
+
+    # Logs configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  openproject-network:
+    driver: bridge

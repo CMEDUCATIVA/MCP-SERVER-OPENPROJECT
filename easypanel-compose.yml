@@ -1,0 +1,74 @@
+# =====================================================
+# Docker Compose optimizado para Easypanel
+# =====================================================
+#
+# Instrucciones de uso en Easypanel:
+# 1. Crear nueva aplicación
+# 2. Seleccionar "Docker Compose"
+# 3. Copiar este archivo
+# 4. Configurar variables de entorno en la UI de Easypanel
+# 5. Deploy!
+
+version: '3.8'
+
+services:
+  app:
+    image: python:3.11-slim
+    working_dir: /app
+
+    # Comando de inicio
+    command: >
+      sh -c "
+      pip install --no-cache-dir -r requirements.txt &&
+      python server_http.py
+      "
+
+    # Puerto expuesto
+    ports:
+      - "8000:8000"
+
+    # Variables de entorno (configurar en Easypanel UI)
+    environment:
+      # OpenProject (REQUERIDO - configurar en Easypanel)
+      OPENPROJECT_URL: ${OPENPROJECT_URL}
+      OPENPROJECT_API_KEY: ${OPENPROJECT_API_KEY}
+
+      # Server
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8000
+
+      # Security
+      HTTP_AUTH_ENABLED: ${HTTP_AUTH_ENABLED:-false}
+      HTTP_AUTH_USERNAME: ${HTTP_AUTH_USERNAME:-admin}
+      HTTP_AUTH_PASSWORD: ${HTTP_AUTH_PASSWORD:-changeme}
+
+      # CORS
+      CORS_ENABLED: ${CORS_ENABLED:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+
+      # Rate Limiting
+      RATE_LIMIT: ${RATE_LIMIT:-100/minute}
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+
+      # Python
+      PYTHONUNBUFFERED: 1
+
+    # Volúmenes (montar código fuente)
+    volumes:
+      - ./openproject_mcp.py:/app/openproject_mcp.py:ro
+      - ./server_http.py:/app/server_http.py:ro
+      - ./requirements.txt:/app/requirements.txt:ro
+
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+    # Restart policy
+    restart: unless-stopped
