@@ -2076,36 +2076,108 @@ class OpenProjectMCPServer:
                     active_only = arguments.get("active_only", True)
                     name_contains = arguments.get("name_contains")
                     offset = arguments.get("offset")
-                    page_size = arguments.get("page_size")
+                    page_size = arguments.get("page_size", 100)  # Default to larger page size
 
-                    result = await self.client.get_projects(
-                        active_only=active_only,
-                        name_contains=name_contains,
-                        offset=offset,
-                        page_size=page_size
-                    )
+                    # If offset is provided, use manual pagination mode
+                    if offset is not None:
+                        result = await self.client.get_projects(
+                            active_only=active_only,
+                            name_contains=name_contains,
+                            offset=offset,
+                            page_size=page_size
+                        )
 
-                    projects = result.get("_embedded", {}).get("elements", [])
-                    total = result.get("total", len(projects))
-                    count = result.get("count", len(projects))
-                    page_size_actual = result.get("pageSize", 20)
-                    offset_actual = result.get("offset", 1)
+                        projects = result.get("_embedded", {}).get("elements", [])
+                        total = result.get("total", len(projects))
+                        count = result.get("count", len(projects))
+                        page_size_actual = result.get("pageSize", page_size)
+                        offset_actual = result.get("offset", offset)
 
-                    if not projects:
+                        if not projects:
+                            text = "No projects found."
+                            if name_contains:
+                                text += f"\n\nSearch term: '{name_contains}'"
+                        else:
+                            # Pagination info
+                            start = offset_actual
+                            end = min(offset_actual + count - 1, total)
+
+                            text = f"**Projects ({start}-{end} of {total})**\n"
+                            if name_contains:
+                                text += f"Search: '{name_contains}'\n"
+                            text += f"Filter: {'Active only' if active_only else 'All'}\n\n"
+
+                            for project in projects:
+                                text += f"- **{project['name']}** (ID: {project['id']})\n"
+                                if project.get("description", {}).get("raw"):
+                                    desc = project['description']['raw']
+                                    # Truncate long descriptions
+                                    if len(desc) > 100:
+                                        desc = desc[:100] + "..."
+                                    text += f"  {desc}\n"
+                                text += f"  Status: {'Active' if project.get('active') else 'Inactive'}\n"
+                                text += f"  Public: {'Yes' if project.get('public') else 'No'}\n\n"
+
+                            # Pagination hints
+                            if end < total:
+                                next_offset = offset_actual + count
+                                text += f"\n---\n"
+                                text += f"💡 To see more results, use:\n"
+                                text += f"   offset={next_offset}, page_size={page_size_actual}\n"
+                                text += f"   Remaining: {total - end} projects\n"
+
+                        return [TextContent(type="text", text=text)]
+                    
+                    # Auto-pagination mode: get all projects
+                    all_projects = []
+                    current_offset = 1
+                    page_size = 100  # Use larger page size for efficiency
+                    total_projects = 0
+                    
+                    logger.info(f"Starting auto-pagination for projects (active_only={active_only}, name_contains={name_contains})")
+                    
+                    while True:
+                        result = await self.client.get_projects(
+                            active_only=active_only,
+                            name_contains=name_contains,
+                            offset=current_offset,
+                            page_size=page_size
+                        )
+                        
+                        projects = result.get("_embedded", {}).get("elements", [])
+                        total = result.get("total", 0)
+                        
+                        if not projects:
+                            break
+                            
+                        all_projects.extend(projects)
+                        total_projects = total
+                        
+                        logger.info(f"Retrieved {len(projects)} projects (offset: {current_offset}, total so far: {len(all_projects)})")
+                        
+                        # Check if we've got all projects
+                        if len(all_projects) >= total:
+                            break
+                            
+                        current_offset += len(projects)
+                        
+                        # Safety check to prevent infinite loops
+                        if len(projects) == 0:
+                            break
+                    
+                    logger.info(f"Auto-pagination complete: {len(all_projects)} projects retrieved")
+                    
+                    if not all_projects:
                         text = "No projects found."
                         if name_contains:
                             text += f"\n\nSearch term: '{name_contains}'"
                     else:
-                        # Pagination info
-                        start = offset_actual
-                        end = min(offset_actual + count - 1, total)
-
-                        text = f"**Projects ({start}-{end} of {total})**\n"
+                        text = f"**All Projects ({len(all_projects)} total)**\n"
                         if name_contains:
                             text += f"Search: '{name_contains}'\n"
                         text += f"Filter: {'Active only' if active_only else 'All'}\n\n"
 
-                        for project in projects:
+                        for project in all_projects:
                             text += f"- **{project['name']}** (ID: {project['id']})\n"
                             if project.get("description", {}).get("raw"):
                                 desc = project['description']['raw']
@@ -2116,21 +2188,13 @@ class OpenProjectMCPServer:
                             text += f"  Status: {'Active' if project.get('active') else 'Inactive'}\n"
                             text += f"  Public: {'Yes' if project.get('public') else 'No'}\n\n"
 
-                        # Pagination hints
-                        if end < total:
-                            next_offset = offset_actual + count
-                            text += f"\n---\n"
-                            text += f"💡 To see more results, use:\n"
-                            text += f"   offset={next_offset}, page_size={page_size_actual}\n"
-                            text += f"   Remaining: {total - end} projects\n"
-
                     return [TextContent(type="text", text=text)]
 
                 elif name == "list_work_packages":
                     project_id = arguments.get("project_id")
                     status = arguments.get("status", "open")
                     offset = arguments.get("offset")
-                    page_size = arguments.get("page_size")
+                    page_size = arguments.get("page_size", 100)  # Default to larger page size
 
                     filters = None
                     if status == "open":
@@ -2142,27 +2206,94 @@ class OpenProjectMCPServer:
                             [{"status_id": {"operator": "c", "values": None}}]
                         )
 
-                    result = await self.client.get_work_packages(
-                        project_id, filters, offset, page_size
-                    )
-                    work_packages = result.get("_embedded", {}).get("elements", [])
+                    # If offset is provided, use manual pagination mode
+                    if offset is not None:
+                        result = await self.client.get_work_packages(
+                            project_id, filters, offset, page_size
+                        )
+                        work_packages = result.get("_embedded", {}).get("elements", [])
 
-                    # Get pagination info from result
-                    total = result.get("total", len(work_packages))
-                    count = result.get("count", len(work_packages))
-                    page_size_actual = result.get("pageSize", page_size or 20)
-                    offset_actual = result.get("offset", offset or 1)
+                        # Get pagination info from result
+                        total = result.get("total", len(work_packages))
+                        count = result.get("count", len(work_packages))
+                        page_size_actual = result.get("pageSize", page_size or 20)
+                        offset_actual = result.get("offset", offset or 1)
 
-                    if not work_packages:
+                        if not work_packages:
+                            text = "No work packages found."
+                        else:
+                            # Show pagination info
+                            text = f"Found {total} work package(s) (showing {count} results"
+                            if offset or page_size:
+                                text += f", offset: {offset_actual}, pageSize: {page_size_actual}"
+                            text += "):\n\n"
+
+                            for wp in work_packages:
+                                text += f"- **{wp.get('subject', 'No title')}** (#{wp.get('id', 'N/A')})\n"
+
+                                if "_embedded" in wp:
+                                    embedded = wp["_embedded"]
+                                    if "type" in embedded:
+                                        text += f"  Type: {embedded['type'].get('name', 'Unknown')}\n"
+                                    if "status" in embedded:
+                                        text += f"  Status: {embedded['status'].get('name', 'Unknown')}\n"
+                                    if "project" in embedded:
+                                        text += f"  Project: {embedded['project'].get('name', 'Unknown')}\n"
+                                    if "assignee" in embedded and embedded["assignee"]:
+                                        text += f"  Assignee: {embedded['assignee'].get('name', 'Unassigned')}\n"
+
+                                if "percentageDone" in wp:
+                                    text += f"  Progress: {wp['percentageDone']}%\n"
+
+                                text += "\n"
+
+                        return [TextContent(type="text", text=text)]
+                    
+                    # Auto-pagination mode: get all work packages
+                    all_work_packages = []
+                    current_offset = 1
+                    page_size = 100  # Use larger page size for efficiency
+                    total_work_packages = 0
+                    
+                    logger.info(f"Starting auto-pagination for work packages (project_id={project_id}, status={status})")
+                    
+                    while True:
+                        result = await self.client.get_work_packages(
+                            project_id, filters, current_offset, page_size
+                        )
+                        
+                        work_packages = result.get("_embedded", {}).get("elements", [])
+                        total = result.get("total", 0)
+                        
+                        if not work_packages:
+                            break
+                            
+                        all_work_packages.extend(work_packages)
+                        total_work_packages = total
+                        
+                        logger.info(f"Retrieved {len(work_packages)} work packages (offset: {current_offset}, total so far: {len(all_work_packages)})")
+                        
+                        # Check if we've got all work packages
+                        if len(all_work_packages) >= total:
+                            break
+                            
+                        current_offset += len(work_packages)
+                        
+                        # Safety check to prevent infinite loops
+                        if len(work_packages) == 0:
+                            break
+                    
+                    logger.info(f"Auto-pagination complete: {len(all_work_packages)} work packages retrieved")
+                    
+                    if not all_work_packages:
                         text = "No work packages found."
                     else:
-                        # Show pagination info
-                        text = f"Found {total} work package(s) (showing {count} results"
-                        if offset or page_size:
-                            text += f", offset: {offset_actual}, pageSize: {page_size_actual}"
-                        text += "):\n\n"
+                        text = f"**All Work Packages ({len(all_work_packages)} total)**\n"
+                        if project_id:
+                            text += f"Project ID: {project_id}\n"
+                        text += f"Status: {status}\n\n"
 
-                        for wp in work_packages:
+                        for wp in all_work_packages:
                             text += f"- **{wp.get('subject', 'No title')}** (#{wp.get('id', 'N/A')})\n"
 
                             if "_embedded" in wp:
