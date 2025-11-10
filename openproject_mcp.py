@@ -190,7 +190,7 @@ class OpenProjectClient:
         
         all_projects = []
         current_offset = 1
-        page_size = 100  # Use larger page size for efficiency
+        page_size = 10000  # Use very large page size to retrieve all projects without limits
         total_projects = 0
         
         while True:
