@@ -696,7 +696,9 @@ async def list_memberships(
         if user_id:
             filters.append({"principal": {"operator": "=", "values": [str(user_id)]}})
         
-        result = await client.get_memberships(filters=filters if filters else None)
+        result = await client.get_memberships(
+            filters=filters if filters else None, full_retrieval=True
+        )
         return result
     except Exception as e:
         logger.error(f"Error in list_memberships: {e}")
@@ -776,7 +778,7 @@ async def list_project_members(request: Request, project_id: int):
     """29. Listar miembros de un proyecto"""
     try:
         filters = [{"project": {"operator": "=", "values": [str(project_id)]}}]
-        result = await client.get_memberships(filters=filters)
+        result = await client.get_memberships(filters=filters, full_retrieval=True)
         return result
     except Exception as e:
         logger.error(f"Error in list_project_members: {e}")
@@ -787,8 +789,7 @@ async def list_project_members(request: Request, project_id: int):
 async def list_user_projects(request: Request, user_id: int):
     """30. Listar proyectos de un usuario"""
     try:
-        filters = [{"principal": {"operator": "=", "values": [str(user_id)]}}]
-        result = await client.get_memberships(filters=filters)
+        result = await client.get_memberships(user_id=user_id, full_retrieval=True)
         return result
     except Exception as e:
         logger.error(f"Error in list_user_projects: {e}")
