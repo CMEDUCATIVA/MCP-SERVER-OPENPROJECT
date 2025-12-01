@@ -571,7 +571,10 @@ class OpenProjectClient:
         self, 
         project_id: Optional[int] = None, 
         user_id: Optional[int] = None,
-        filters: Optional[List] = None
+        filters: Optional[List] = None,
+        offset: Optional[int] = None,
+        page_size: Optional[int] = None,
+        full_retrieval: bool = False
     ) -> Dict:
         """
         Retrieve memberships.
@@ -597,14 +600,91 @@ class OpenProjectClient:
         if user_id:
             filter_list.append({"user": {"operator": "=", "values": [str(user_id)]}})
 
-        # Encode filters if any
+        if full_retrieval and offset is None and page_size is None:
+            logger.info(
+                "Starting FULL retrieval of memberships "
+                f"(project_id={project_id}, user_id={user_id})"
+            )
+            all_memberships = []
+            total_memberships = 0
+            current_offset = 1
+            retrieval_page_size = 100  # razonable por página
+
+            while True:
+                page_result = await self._get_memberships_page(
+                    filter_list=list(filter_list),
+                    offset=current_offset,
+                    page_size=retrieval_page_size,
+                )
+
+                memberships = page_result.get("_embedded", {}).get("elements", [])
+                total_memberships = page_result.get("total", total_memberships)
+
+                if not memberships:
+                    break
+
+                all_memberships.extend(memberships)
+
+                logger.info(
+                    f"Retrieved {len(memberships)} memberships "
+                    f"(offset: {current_offset}, total so far: {len(all_memberships)})"
+                )
+
+                if total_memberships and len(all_memberships) >= total_memberships:
+                    break
+
+                current_offset += len(memberships)
+
+                if len(memberships) == 0:
+                    break
+
+            logger.info(
+                f"FULL retrieval complete: {len(all_memberships)} memberships retrieved"
+            )
+
+            return {
+                "_type": "Collection",
+                "total": len(all_memberships),
+                "count": len(all_memberships),
+                "pageSize": len(all_memberships),
+                "offset": 1,
+                "_embedded": {"elements": all_memberships},
+                "_retrieval_info": {
+                    "mode": "full_retrieval",
+                    "requested_total": total_memberships,
+                    "note": "All memberships retrieved successfully"
+                }
+            }
+
+        return await self._get_memberships_page(
+            filter_list=filter_list,
+            offset=offset,
+            page_size=page_size,
+        )
+
+    async def _get_memberships_page(
+        self,
+        filter_list: List[Any],
+        offset: Optional[int] = None,
+        page_size: Optional[int] = None,
+    ) -> Dict:
+        endpoint = "/memberships"
+        query_params = []
+
         if filter_list:
-            filter_string = quote(json.dumps(filter_list))
-            endpoint += f"?filters={filter_string}"
+            encoded_filters = quote(json.dumps(filter_list))
+            query_params.append(f"filters={encoded_filters}")
+
+        if offset is not None:
+            query_params.append(f"offset={offset}")
+        if page_size is not None:
+            query_params.append(f"pageSize={page_size}")
+
+        if query_params:
+            endpoint += "?" + "&".join(query_params)
 
         result = await self._request("GET", endpoint)
 
-        # Ensure proper response structure
         if "_embedded" not in result:
             result["_embedded"] = {"elements": []}
         elif "elements" not in result.get("_embedded", {}):
@@ -2499,7 +2579,9 @@ class OpenProjectMCPServer:
                     user_id = arguments.get("user_id")
 
                     try:
-                        result = await self.client.get_memberships(project_id, user_id)
+                        result = await self.client.get_memberships(
+                            project_id=project_id, user_id=user_id, full_retrieval=True
+                        )
                         memberships = result.get("_embedded", {}).get("elements", [])
 
                         if not memberships:
@@ -3188,7 +3270,9 @@ class OpenProjectMCPServer:
                     filters = json.dumps(
                         [{"project": {"operator": "=", "values": [str(project_id)]}}]
                     )
-                    result = await self.client.get_memberships(project_id=project_id)
+                    result = await self.client.get_memberships(
+                        project_id=project_id, full_retrieval=True
+                    )
                     memberships = result.get("_embedded", {}).get("elements", [])
 
                     if not memberships:
@@ -3219,7 +3303,9 @@ class OpenProjectMCPServer:
                     user_id = arguments["user_id"]
 
                     # Filter memberships by user
-                    result = await self.client.get_memberships(user_id=user_id)
+                    result = await self.client.get_memberships(
+                        user_id=user_id, full_retrieval=True
+                    )
                     memberships = result.get("_embedded", {}).get("elements", [])
 
                     if not memberships:
