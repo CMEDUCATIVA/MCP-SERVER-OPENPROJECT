@@ -598,7 +598,7 @@ class OpenProjectClient:
         
         # Add user filter if provided
         if user_id:
-            filter_list.append({"user": {"operator": "=", "values": [str(user_id)]}})
+            filter_list.append({"principal": {"operator": "=", "values": [str(user_id)]}})
 
         if full_retrieval and offset is None and page_size is None:
             logger.info(
