@@ -335,13 +335,13 @@ async def delete_project(request: Request, project_id: int):
 @limiter.limit(RATE_LIMIT)
 async def list_work_packages(
     request: Request,
-    project_id: Optional[int] = None,
+    project_id: int,
     status: str = "open",
     offset: Optional[int] = None,
     page_size: Optional[int] = None,
     full_retrieval: bool = True
 ):
-    """3. Listar TODOS los work packages (con paginación opcional)"""
+    """3. Listar TODOS los work packages (requiere project_id y recupera todo)"""
     try:
         # Construir filtros
         filters = []
@@ -1024,11 +1024,10 @@ async def rest_get_user(request: Request, user_id: int):
 @limiter.limit(RATE_LIMIT)
 async def rest_list_workpackages(
     request: Request,
-    project_id: Optional[int] = None,
+    project_id: int,
     status: str = "open"
 ):
     """Alias REST: Listar work packages"""
-    # Llamar directamente sin parámetros de paginación para forzar recuperación completa
     return await list_work_packages(request, project_id, status)
 
 @app.post("/api/v1/workpackages", tags=["REST Aliases"], dependencies=[Depends(verify_credentials)])
@@ -1123,10 +1122,12 @@ async def query(request: Request):
     elif tool == "list_users":
         return await list_users(request, params.get("active_only", True))
     elif tool == "list_work_packages":
-        # Llamar directamente sin parámetros de paginación para forzar recuperación completa
+        project_id = params.get("project_id")
+        if project_id is None:
+            raise HTTPException(status_code=400, detail="project_id is required")
         return await list_work_packages(
             request,
-            project_id=params.get("project_id"),
+            project_id=project_id,
             status=params.get("status", "open")
         )
     else:
