@@ -79,6 +79,8 @@ client = OpenProjectClient(
 
 logger.info(f"OpenProject Client initialized for: {OPENPROJECT_URL}")
 
+OPENAPI_BASE_URL = os.getenv("OPENAPI_BASE_URL", f"http://{HTTP_HOST}:{HTTP_PORT}")
+
 # Configurar FastAPI
 app = FastAPI(
     title="OpenProject MCP HTTP Adapter",
@@ -99,6 +101,8 @@ app = FastAPI(
         {"name": "Versions", "description": "Gestión de versiones"},
         {"name": "REST Aliases", "description": "Endpoints REST simplificados"},
     ]
+    ,
+    servers=[{"url": OPENAPI_BASE_URL}]
 )
 
 # Configurar Rate Limiter
