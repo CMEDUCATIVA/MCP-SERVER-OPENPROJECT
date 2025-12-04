@@ -444,7 +444,7 @@ async def create_work_package(
         if assignee_id is not None:
             payload["assignee_id"] = assignee_id
 
-        logger.debug(f"payload for create_work_package: {payload}")
+        logger.info(f"payload for create_work_package: {payload}")
         result = await client.create_work_package(payload)
         return result
     except Exception as e:
