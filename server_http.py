@@ -431,14 +431,20 @@ async def create_work_package(
 ):
     """5. Crear un nuevo work package"""
     try:
-        result = await client.create_work_package(
-            project_id=project_id,
-            subject=subject,
-            type_id=type_id,
-            description=description,
-            priority_id=priority_id,
-            assignee_id=assignee_id
-        )
+        payload = {
+            "project": project_id,
+            "subject": subject,
+            "type": type_id,
+        }
+
+        if description is not None:
+            payload["description"] = description
+        if priority_id is not None:
+            payload["priority_id"] = priority_id
+        if assignee_id is not None:
+            payload["assignee_id"] = assignee_id
+
+        result = await client.create_work_package(payload)
         return result
     except Exception as e:
         logger.error(f"Error in create_work_package: {e}")
