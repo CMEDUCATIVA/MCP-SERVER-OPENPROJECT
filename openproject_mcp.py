@@ -437,16 +437,23 @@ class OpenProjectClient:
 
         return result
 
-    async def create_work_package(self, data: Dict) -> Dict:
+    async def create_work_package(self, data: Optional[Dict] = None, **kwargs) -> Dict:
         """
         Create a new work package.
 
         Args:
             data: Work package data including project, subject, type, etc.
+            **kwargs: Optional keyword args for backward compatibility
 
         Returns:
             Dict: Created work package data
         """
+        # Allow either dict or keyword-style arguments (backward compatibility)
+        if data is None:
+            data = {}
+        if kwargs:
+            data = {**data, **kwargs}
+
         # Prepare initial payload for form
         form_payload = {"_links": {}}
 
