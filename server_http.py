@@ -174,13 +174,24 @@ async def root():
 @app.get("/health", tags=["Info"])
 @limiter.limit(RATE_LIMIT)
 async def health_check(request: Request):
-    """Verificar estado del servicio"""
+    """Verificar estado del servicio (no depende de OpenProject)"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "service": "openproject-mcp-http",
+    }
+
+
+@app.get("/health/openproject", tags=["Info"])
+@limiter.limit(RATE_LIMIT)
+async def health_openproject(request: Request):
+    """Verificar estado de la conexión con OpenProject"""
     try:
-        result = await client.test_connection()
+        await client.test_connection()
         return {
             "status": "healthy",
             "timestamp": datetime.utcnow().isoformat(),
-            "openproject": "connected" if result.get("success") else "disconnected"
+            "openproject": "connected",
         }
     except Exception as e:
         return JSONResponse(
@@ -188,8 +199,9 @@ async def health_check(request: Request):
             content={
                 "status": "unhealthy",
                 "timestamp": datetime.utcnow().isoformat(),
-                "error": str(e)
-            }
+                "openproject": "disconnected",
+                "error": str(e),
+            },
         )
 
 # ============================================================================
