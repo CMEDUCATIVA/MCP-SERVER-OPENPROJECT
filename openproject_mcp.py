@@ -75,7 +75,11 @@ class OpenProjectClient:
         return base64.b64encode(credentials.encode()).decode()
 
     async def _request(
-        self, method: str, endpoint: str, data: Optional[Dict] = None
+        self,
+        method: str,
+        endpoint: str,
+        data: Optional[Dict] = None,
+        params: Optional[Dict] = None,
     ) -> Dict:
         """
         Execute an API request.
@@ -113,6 +117,8 @@ class OpenProjectClient:
                     "headers": self.headers,
                     "json": data,
                 }
+                if params:
+                    request_params["params"] = params
 
                 # Add proxy if configured
                 if self.proxy:
@@ -756,6 +762,115 @@ class OpenProjectClient:
             Dict: Activities collection
         """
         return await self._request("GET", f"/work_packages/{work_package_id}/activities")
+
+    async def add_work_package_comment(
+        self,
+        work_package_id: int,
+        comment: str,
+        internal: bool = False,
+        notify: Optional[bool] = None,
+    ) -> Dict:
+        """
+        Add a comment (activity) to a work package.
+
+        Args:
+            work_package_id: The work package ID
+            comment: Comment text (raw)
+            internal: Whether the comment is internal
+            notify: Whether to send notifications (optional)
+
+        Returns:
+            Dict: Activity data
+        """
+        payload = {"comment": {"raw": comment}, "internal": internal}
+        params = {"notify": str(notify).lower()} if notify is not None else None
+        return await self._request(
+            "POST", f"/work_packages/{work_package_id}/activities", payload, params
+        )
+
+    async def create_work_package_reminder(
+        self,
+        work_package_id: int,
+        remind_at: str,
+        note: Optional[str] = None,
+    ) -> Dict:
+        """
+        Create a reminder for a specific work package.
+
+        Args:
+            work_package_id: The work package ID
+            remind_at: Date-time when the reminder is due (ISO 8601)
+            note: Optional reminder note
+
+        Returns:
+            Dict: Reminder data
+        """
+        payload = {"remindAt": remind_at}
+        if note is not None:
+            payload["note"] = note
+        return await self._request(
+            "POST", f"/work_packages/{work_package_id}/reminders", payload
+        )
+
+    async def delete_reminder(self, reminder_id: int) -> bool:
+        """
+        Delete a reminder by ID.
+
+        Args:
+            reminder_id: The reminder ID
+
+        Returns:
+            bool: True if successful
+        """
+        await self._request("DELETE", f"/reminders/{reminder_id}")
+        return True
+
+    async def update_reminder(
+        self,
+        reminder_id: int,
+        remind_at: Optional[str] = None,
+        note: Optional[str] = None,
+    ) -> Dict:
+        """
+        Update a reminder by ID.
+
+        Args:
+            reminder_id: The reminder ID
+            remind_at: Date-time when the reminder is due (ISO 8601)
+            note: Optional reminder note
+
+        Returns:
+            Dict: Reminder data
+        """
+        payload: Dict[str, Any] = {}
+        if remind_at is not None:
+            payload["remindAt"] = remind_at
+        if note is not None:
+            payload["note"] = note
+        return await self._request("PATCH", f"/reminders/{reminder_id}", payload)
+
+    async def list_work_package_reminders(self, work_package_id: int) -> Dict:
+        """
+        List reminders for a specific work package (current user only).
+
+        Args:
+            work_package_id: The work package ID
+
+        Returns:
+            Dict: Reminders collection
+        """
+        return await self._request(
+            "GET", f"/work_packages/{work_package_id}/reminders"
+        )
+
+    async def list_reminders(self) -> Dict:
+        """
+        List all active reminders for the current user.
+
+        Returns:
+            Dict: Reminders collection
+        """
+        return await self._request("GET", "/reminders")
 
     async def update_work_package(self, work_package_id: int, data: Dict) -> Dict:
         """
@@ -1675,6 +1790,110 @@ class OpenProjectMCPServer:
                         },
                         "required": ["work_package_id"],
                     },
+                ),
+                Tool(
+                    name="add_work_package_comment",
+                    description="Add a comment (activity) to a work package",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "work_package_id": {
+                                "type": "integer",
+                                "description": "Work package ID",
+                            },
+                            "comment": {
+                                "type": "string",
+                                "description": "Comment text (raw)",
+                            },
+                            "internal": {
+                                "type": "boolean",
+                                "description": "Whether the comment is internal",
+                                "default": False,
+                            },
+                            "notify": {
+                                "type": "boolean",
+                                "description": "Send notifications to watchers/assignees",
+                            },
+                        },
+                        "required": ["work_package_id", "comment"],
+                    },
+                ),
+                Tool(
+                    name="create_work_package_reminder",
+                    description="Create a reminder for a work package",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "work_package_id": {
+                                "type": "integer",
+                                "description": "Work package ID",
+                            },
+                            "remind_at": {
+                                "type": "string",
+                                "description": "Reminder date-time in ISO 8601 format",
+                            },
+                            "note": {
+                                "type": "string",
+                                "description": "Optional reminder note",
+                            },
+                        },
+                        "required": ["work_package_id", "remind_at"],
+                    },
+                ),
+                Tool(
+                    name="delete_reminder",
+                    description="Delete a reminder by ID",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "reminder_id": {
+                                "type": "integer",
+                                "description": "Reminder ID",
+                            }
+                        },
+                        "required": ["reminder_id"],
+                    },
+                ),
+                Tool(
+                    name="update_reminder",
+                    description="Update a reminder by ID",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "reminder_id": {
+                                "type": "integer",
+                                "description": "Reminder ID",
+                            },
+                            "remind_at": {
+                                "type": "string",
+                                "description": "Reminder date-time in ISO 8601 format",
+                            },
+                            "note": {
+                                "type": "string",
+                                "description": "Optional reminder note",
+                            },
+                        },
+                        "required": ["reminder_id"],
+                    },
+                ),
+                Tool(
+                    name="list_work_package_reminders",
+                    description="List reminders for a work package (current user only)",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "work_package_id": {
+                                "type": "integer",
+                                "description": "Work package ID",
+                            }
+                        },
+                        "required": ["work_package_id"],
+                    },
+                ),
+                Tool(
+                    name="list_reminders",
+                    description="List all active reminders for the current user",
+                    inputSchema={"type": "object", "properties": {}},
                 ),
                 Tool(
                     name="update_work_package",
@@ -2754,6 +2973,110 @@ class OpenProjectMCPServer:
                             text += f"  Created: {activity.get('createdAt', 'N/A')}\n"
                             if activity.get("comment", {}).get("raw"):
                                 text += f"  Comment: {activity['comment']['raw']}\n"
+                            text += "\n"
+
+                    return [TextContent(type="text", text=text)]
+
+                elif name == "add_work_package_comment":
+                    work_package_id = arguments["work_package_id"]
+                    comment = arguments["comment"]
+                    internal = arguments.get("internal", False)
+                    notify = arguments.get("notify")
+
+                    result = await self.client.add_work_package_comment(
+                        work_package_id=work_package_id,
+                        comment=comment,
+                        internal=internal,
+                        notify=notify,
+                    )
+
+                    text = f"✅ Comment added to work package #{work_package_id}.\n"
+                    text += f"- **Activity ID**: {result.get('id', 'N/A')}\n"
+                    text += f"- **Created**: {result.get('createdAt', 'N/A')}\n"
+                    return [TextContent(type="text", text=text)]
+
+                elif name == "create_work_package_reminder":
+                    work_package_id = arguments["work_package_id"]
+                    remind_at = arguments["remind_at"]
+                    note = arguments.get("note")
+
+                    result = await self.client.create_work_package_reminder(
+                        work_package_id=work_package_id,
+                        remind_at=remind_at,
+                        note=note,
+                    )
+
+                    text = f"✅ Reminder created for work package #{work_package_id}.\n"
+                    text += f"- **Reminder ID**: {result.get('id', 'N/A')}\n"
+                    text += f"- **Remind At**: {result.get('remindAt', 'N/A')}\n"
+                    if result.get("note"):
+                        text += f"- **Note**: {result.get('note')}\n"
+                    return [TextContent(type="text", text=text)]
+
+                elif name == "delete_reminder":
+                    reminder_id = arguments["reminder_id"]
+                    success = await self.client.delete_reminder(reminder_id)
+                    if success:
+                        text = f"✅ Reminder #{reminder_id} deleted successfully."
+                    else:
+                        text = f"❌ Failed to delete reminder #{reminder_id}."
+                    return [TextContent(type="text", text=text)]
+
+                elif name == "update_reminder":
+                    reminder_id = arguments["reminder_id"]
+                    remind_at = arguments.get("remind_at")
+                    note = arguments.get("note")
+
+                    if remind_at is None and note is None:
+                        return [
+                            TextContent(
+                                type="text", text="❌ No fields provided to update."
+                            )
+                        ]
+
+                    result = await self.client.update_reminder(
+                        reminder_id=reminder_id,
+                        remind_at=remind_at,
+                        note=note,
+                    )
+
+                    text = f"✅ Reminder #{reminder_id} updated successfully.\n"
+                    text += f"- **Remind At**: {result.get('remindAt', 'N/A')}\n"
+                    if result.get("note"):
+                        text += f"- **Note**: {result.get('note')}\n"
+                    return [TextContent(type="text", text=text)]
+
+                elif name == "list_work_package_reminders":
+                    work_package_id = arguments["work_package_id"]
+                    result = await self.client.list_work_package_reminders(work_package_id)
+                    reminders = result.get("_embedded", {}).get("elements", [])
+
+                    if not reminders:
+                        text = f"No reminders found for work package #{work_package_id}."
+                    else:
+                        text = f"Reminders for work package #{work_package_id}:\n\n"
+                        for reminder in reminders:
+                            text += f"- **ID**: {reminder.get('id', 'N/A')}\n"
+                            text += f"  Remind At: {reminder.get('remindAt', 'N/A')}\n"
+                            if reminder.get("note"):
+                                text += f"  Note: {reminder.get('note')}\n"
+                            text += "\n"
+
+                    return [TextContent(type="text", text=text)]
+
+                elif name == "list_reminders":
+                    result = await self.client.list_reminders()
+                    reminders = result.get("_embedded", {}).get("elements", [])
+
+                    if not reminders:
+                        text = "No active reminders found."
+                    else:
+                        text = "Active reminders:\n\n"
+                        for reminder in reminders:
+                            text += f"- **ID**: {reminder.get('id', 'N/A')}\n"
+                            text += f"  Remind At: {reminder.get('remindAt', 'N/A')}\n"
+                            if reminder.get("note"):
+                                text += f"  Note: {reminder.get('note')}\n"
                             text += "\n"
 
                     return [TextContent(type="text", text=text)]
