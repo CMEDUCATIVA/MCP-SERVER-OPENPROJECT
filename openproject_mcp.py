@@ -745,6 +745,18 @@ class OpenProjectClient:
         """
         return await self._request("GET", f"/work_packages/{work_package_id}")
 
+    async def get_work_package_activities(self, work_package_id: int) -> Dict:
+        """
+        Retrieve activities for a specific work package.
+
+        Args:
+            work_package_id: The work package ID
+
+        Returns:
+            Dict: Activities collection
+        """
+        return await self._request("GET", f"/work_packages/{work_package_id}/activities")
+
     async def update_work_package(self, work_package_id: int, data: Dict) -> Dict:
         """
         Update an existing work package.
@@ -1639,6 +1651,20 @@ class OpenProjectMCPServer:
                 Tool(
                     name="get_work_package",
                     description="Get detailed information about a specific work package",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "work_package_id": {
+                                "type": "integer",
+                                "description": "Work package ID",
+                            }
+                        },
+                        "required": ["work_package_id"],
+                    },
+                ),
+                Tool(
+                    name="list_work_package_activities",
+                    description="List activities for a specific work package",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -2711,6 +2737,24 @@ class OpenProjectMCPServer:
 
                     if result.get("description", {}).get("raw"):
                         text += f"\n**Description:**\n{result['description']['raw']}\n"
+
+                    return [TextContent(type="text", text=text)]
+
+                elif name == "list_work_package_activities":
+                    work_package_id = arguments["work_package_id"]
+                    result = await self.client.get_work_package_activities(work_package_id)
+
+                    activities = result.get("_embedded", {}).get("elements", [])
+                    if not activities:
+                        text = f"No activities found for work package #{work_package_id}."
+                    else:
+                        text = f"Activities for work package #{work_package_id}:\n\n"
+                        for activity in activities:
+                            text += f"- **ID**: {activity.get('id', 'N/A')}\n"
+                            text += f"  Created: {activity.get('createdAt', 'N/A')}\n"
+                            if activity.get("comment", {}).get("raw"):
+                                text += f"  Comment: {activity['comment']['raw']}\n"
+                            text += "\n"
 
                     return [TextContent(type="text", text=text)]
 
