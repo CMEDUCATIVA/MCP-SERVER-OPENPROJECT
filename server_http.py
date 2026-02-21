@@ -434,6 +434,17 @@ async def get_work_package(request: Request, work_package_id: int):
         logger.error(f"Error in get_work_package: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/tools/list_work_package_activities", tags=["Work Packages"], dependencies=[Depends(verify_credentials)])
+@limiter.limit(RATE_LIMIT)
+async def list_work_package_activities(request: Request, work_package_id: int):
+    """11b. Listar actividades de un work package"""
+    try:
+        result = await client.get_work_package_activities(work_package_id=work_package_id)
+        return result
+    except Exception as e:
+        logger.error(f"Error in list_work_package_activities: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/tools/create_work_package", tags=["Work Packages"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
 async def create_work_package(
@@ -1072,6 +1083,12 @@ async def rest_create_workpackage(
 async def rest_get_workpackage(request: Request, work_package_id: int):
     """Alias REST: Obtener work package específico"""
     return await get_work_package(request, work_package_id)
+
+@app.get("/api/v1/workpackages/{work_package_id}/activities", tags=["REST Aliases"], dependencies=[Depends(verify_credentials)])
+@limiter.limit(RATE_LIMIT)
+async def rest_list_workpackage_activities(request: Request, work_package_id: int):
+    """Alias REST: Listar actividades de un work package"""
+    return await list_work_package_activities(request, work_package_id)
 
 @app.put("/api/v1/workpackages/{work_package_id}", tags=["REST Aliases"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
