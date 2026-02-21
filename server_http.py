@@ -434,7 +434,7 @@ async def get_work_package(request: Request, work_package_id: int):
         logger.error(f"Error in get_work_package: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/tools/list_work_package_activities", tags=["Work Package Relations"], dependencies=[Depends(verify_credentials)])
+@app.post("/tools/list_work_package_activities", tags=["Work Packages"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
 async def list_work_package_activities(request: Request, work_package_id: int):
     """11b. Listar actividades de un work package"""
@@ -445,7 +445,7 @@ async def list_work_package_activities(request: Request, work_package_id: int):
         logger.error(f"Error in list_work_package_activities: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/tools/add_work_package_comment", tags=["Work Package Relations"], dependencies=[Depends(verify_credentials)])
+@app.post("/tools/add_work_package_comment", tags=["Work Packages"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
 async def add_work_package_comment(
     request: Request,
@@ -467,7 +467,7 @@ async def add_work_package_comment(
         logger.error(f"Error in add_work_package_comment: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/tools/create_work_package_reminder", tags=["Work Package Relations"], dependencies=[Depends(verify_credentials)])
+@app.post("/tools/create_work_package_reminder", tags=["Work Packages"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
 async def create_work_package_reminder(
     request: Request,
@@ -487,7 +487,7 @@ async def create_work_package_reminder(
         logger.error(f"Error in create_work_package_reminder: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/tools/list_work_package_reminders", tags=["Work Package Relations"], dependencies=[Depends(verify_credentials)])
+@app.get("/tools/list_work_package_reminders", tags=["Work Packages"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
 async def list_work_package_reminders(request: Request, work_package_id: int):
     """11g. Listar recordatorios de un work package"""
@@ -498,7 +498,7 @@ async def list_work_package_reminders(request: Request, work_package_id: int):
         logger.error(f"Error in list_work_package_reminders: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/tools/list_reminders", tags=["Work Package Relations"], dependencies=[Depends(verify_credentials)])
+@app.get("/tools/list_reminders", tags=["Work Packages"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
 async def list_reminders(request: Request):
     """11h. Listar recordatorios activos del usuario"""
@@ -509,7 +509,7 @@ async def list_reminders(request: Request):
         logger.error(f"Error in list_reminders: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/tools/delete_reminder", tags=["Work Package Relations"], dependencies=[Depends(verify_credentials)])
+@app.delete("/tools/delete_reminder", tags=["Work Packages"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
 async def delete_reminder(request: Request, reminder_id: int):
     """11e. Eliminar recordatorio"""
@@ -520,7 +520,7 @@ async def delete_reminder(request: Request, reminder_id: int):
         logger.error(f"Error in delete_reminder: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.patch("/tools/update_reminder", tags=["Work Package Relations"], dependencies=[Depends(verify_credentials)])
+@app.patch("/tools/update_reminder", tags=["Work Packages"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
 async def update_reminder(
     request: Request,
@@ -1181,13 +1181,13 @@ async def rest_get_workpackage(request: Request, work_package_id: int):
     """Alias REST: Obtener work package específico"""
     return await get_work_package(request, work_package_id)
 
-@app.get("/api/v1/workpackages/{work_package_id}/activities", tags=["Work Package Relations"], dependencies=[Depends(verify_credentials)])
+@app.get("/api/v1/workpackages/{work_package_id}/activities", tags=["Work Packages"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
 async def rest_list_workpackage_activities(request: Request, work_package_id: int):
     """Alias REST: Listar actividades de un work package"""
     return await list_work_package_activities(request, work_package_id)
 
-@app.post("/api/v1/workpackages/{work_package_id}/activities", tags=["Work Package Relations"], dependencies=[Depends(verify_credentials)])
+@app.post("/api/v1/workpackages/{work_package_id}/activities", tags=["Work Packages"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
 async def rest_add_workpackage_comment(
     request: Request,
@@ -1205,7 +1205,7 @@ async def rest_add_workpackage_comment(
         notify=notify
     )
 
-@app.post("/api/v1/workpackages/{work_package_id}/reminders", tags=["Work Package Relations"], dependencies=[Depends(verify_credentials)])
+@app.post("/api/v1/workpackages/{work_package_id}/reminders", tags=["Work Packages"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
 async def rest_create_workpackage_reminder(
     request: Request,
@@ -1221,25 +1221,25 @@ async def rest_create_workpackage_reminder(
         note=note
     )
 
-@app.get("/api/v1/workpackages/{work_package_id}/reminders", tags=["Work Package Relations"], dependencies=[Depends(verify_credentials)])
+@app.get("/api/v1/workpackages/{work_package_id}/reminders", tags=["Work Packages"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
 async def rest_list_workpackage_reminders(request: Request, work_package_id: int):
     """Alias REST: Listar recordatorios de un work package"""
     return await list_work_package_reminders(request, work_package_id)
 
-@app.get("/api/v1/reminders", tags=["Work Package Relations"], dependencies=[Depends(verify_credentials)])
+@app.get("/api/v1/reminders", tags=["Work Packages"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
 async def rest_list_reminders(request: Request):
     """Alias REST: Listar recordatorios activos del usuario"""
     return await list_reminders(request)
 
-@app.delete("/api/v1/reminders/{reminder_id}", tags=["Work Package Relations"], dependencies=[Depends(verify_credentials)])
+@app.delete("/api/v1/reminders/{reminder_id}", tags=["Work Packages"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
 async def rest_delete_reminder(request: Request, reminder_id: int):
     """Alias REST: Eliminar recordatorio"""
     return await delete_reminder(request, reminder_id)
 
-@app.patch("/api/v1/reminders/{reminder_id}", tags=["Work Package Relations"], dependencies=[Depends(verify_credentials)])
+@app.patch("/api/v1/reminders/{reminder_id}", tags=["Work Packages"], dependencies=[Depends(verify_credentials)])
 @limiter.limit(RATE_LIMIT)
 async def rest_update_reminder(
     request: Request,
